@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard Figuepartes — Meta (V1)</title>
+  <!-- Tailwind via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js for charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --fp-azul: #213367;
+      --fp-amarillo: #FFDA48;
+    }
+    .fp-title { color: var(--fp-azul); }
+    .kpi-card { border: 1px solid #e5e7eb; }
+    .kpi-value { color: var(--fp-azul); }
+    .badge { background: var(--fp-amarillo); color: #111827; }
+    /* Wrap chart with fixed height to avoid infinite stretching */
+    .chart-wrap { position: relative; height: 20rem; }
+    @media (min-width: 768px) { .chart-wrap { height: 22rem; } }
+  </style>
+</head>
+<body class="bg-white text-gray-800">
+  <header class="border-b">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+      <h1 class="text-xl sm:text-2xl font-semibold fp-title">Dashboard Figuepartes — Meta (V1)</h1>
+      <span class="badge px-3 py-1 rounded text-sm font-medium">Beta</span>
+    </div>
+  </header>
+
+  <!-- Filters section -->
+  <section class="max-w-7xl mx-auto px-4 py-6">
+    <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="col-span-2">
+        <label class="block text-sm font-medium mb-1">Cargar CSV (opcional)</label>
+        <input id="fileInput" type="file" accept=".csv" class="block w-full border rounded px-3 py-2">
+        <p class="text-xs text-gray-500 mt-1">Plantilla: month, year, objective_code, objective_name, campaign_name, adset_name, ad_name, status, start_date, end_date, amount_spent_usd, impressions, reach, frequency, link_clicks, post_engagements, new_conversations, total_conversations, notes.</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">Moneda</label>
+        <select id="currency" class="w-full border rounded px-3 py-2">
+          <option value="USD">USD</option>
+          <option value="GTQ">GTQ</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">Tipo de cambio (1 USD = Q)</label>
+        <input id="fx" type="number" step="0.01" value="7.90" class="w-full border rounded px-3 py-2">
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">Mes</label>
+        <select id="month" class="w-full border rounded px-3 py-2">
+          <option value="ALL">Todos</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">Objetivo</label>
+        <select id="objective" class="w-full border rounded px-3 py-2">
+          <option value="ALL">Todos</option>
+          <option value="TR">TR — Tráfico</option>
+          <option value="SA">SA — Conversaciones</option>
+          <option value="EN">EN — Interacción</option>
+          <option value="AW">AW — Awareness</option>
+        </select>
+      </div>
+      <div class="col-span-2 flex items-end gap-3">
+        <button id="resetBtn" class="px-4 py-2 border rounded text-[color:var(--fp-azul)] border-[color:var(--fp-azul)] hover:bg-gray-50">Reset filtros</button>
+        <button id="exportBtn" class="px-4 py-2 border rounded hover:bg-gray-50">Exportar vista (CSV)</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- KPI section -->
+  <section class="max-w-7xl mx-auto px-4 pb-6">
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+      <div class="kpi-card rounded p-3"><div class="text-xs text-gray-500">Invertido</div><div id="kpi_spend" class="text-lg font-semibold kpi-value">—</div></div>
+      <div class="kpi-card rounded p-3"><div class="text-xs text-gray-500">Impresiones</div><div id="kpi_impr" class="text-lg font-semibold kpi-value">—</div></div>
+      <div class="kpi-card rounded p-3"><div class="text-xs text-gray-500">Alcance</div><div id="kpi_reach" class="text-lg font-semibold kpi-value">—</div></div>
+      <div class="kpi-card rounded p-3"><div class="text-xs text-gray-500">Frecuencia</div><div id="kpi_freq" class="text-lg font-semibold kpi-value">—</div></div>
+      <div class="kpi-card rounded p-3"><div class="text-xs text-gray-500">Clics enlace (TR)</div><div id="kpi_clicks" class="text-lg font-semibold kpi-value">—</div></div>
+      <div class="kpi-card rounded p-3"><div class="text-xs text-gray-500">Interacciones (EN)</div><div id="kpi_eng" class="text-lg font-semibold kpi-value">—</div></div>
+      <div class="kpi-card rounded p-3"><div class="text-xs text-gray-500">Nuevas conv. (SA)</div><div id="kpi_newconv" class="text-lg font-semibold kpi-value">—</div></div>
+      <div class="kpi-card rounded p-3"><div class="text-xs text-gray-500">Conv. totales (SA)</div><div id="kpi_totconv" class="text-lg font-semibold kpi-value">—</div></div>
+    </div>
+    <div class="kpi-card rounded p-3 mt-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="md:col-span-1">
+          <div class="text-xs text-gray-500">CPC promedio</div>
+          <div id="kpi_cpc" class="text-lg font-semibold kpi-value">—</div>
+        </div>
+        <div class="md:col-span-2">
+          <div class="flex items-center justify-between">
+            <div class="text-sm text-gray-600">Tendencia mensual (Inversión vs Resultado clave)</div>
+            <div id="trendLegend" class="text-xs"></div>
+          </div>
+          <div id="trendContainer" class="chart-wrap">
+            <canvas id="trendChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Ranking table -->
+  <section class="max-w-7xl mx-auto px-4 pb-10">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-lg font-semibold fp-title">Ranking por campaña (según objetivo)</h2>
+      <span class="text-xs text-gray-500">TR: por clics y CPC · SA: por conv. y costo/conv. · EN/AW: por interacciones/alcance</span>
+    </div>
+    <div class="overflow-auto border rounded">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-50">
+          <tr class="text-left">
+            <th class="px-3 py-2">Campaña</th>
+            <th class="px-3 py-2">Objetivo</th>
+            <th class="px-3 py-2">Invertido</th>
+            <th class="px-3 py-2">Impr.</th>
+            <th class="px-3 py-2">Alcance</th>
+            <th class="px-3 py-2">Clics (TR)</th>
+            <th class="px-3 py-2">Interacc. (EN)</th>
+            <th class="px-3 py-2">Nuevas conv. (SA)</th>
+            <th class="px-3 py-2">Conv. tot. (SA)</th>
+            <th class="px-3 py-2">CPC</th>
+          </tr>
+        </thead>
+        <tbody id="rankBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- JavaScript for dashboard logic -->
+  <script>
+    // Sample dataset to initialize demonstration. Replace or augment by uploading CSV.
+    let rawData = [
+      {month: 1, year: 2025, objective_code:'TR', objective_name:'Trafico', campaign_name:'Campaña Ene', amount_spent_usd:500, impressions:120000, reach:80000, frequency:1.5, link_clicks:3200, post_engagements:1500, new_conversations:200, total_conversations:300},
+      {month: 2, year: 2025, objective_code:'SA', objective_name:'Conversaciones', campaign_name:'Campaña Feb', amount_spent_usd:450, impressions:110000, reach:75000, frequency:1.47, link_clicks:2800, post_engagements:1400, new_conversations:180, total_conversations:250},
+      {month: 3, year: 2025, objective_code:'TR', objective_name:'Trafico', campaign_name:'Campaña Mar', amount_spent_usd:550, impressions:130000, reach:90000, frequency:1.44, link_clicks:3500, post_engagements:1600, new_conversations:210, total_conversations:310},
+      {month: 4, year: 2025, objective_code:'EN', objective_name:'Interaccion', campaign_name:'Campaña Abr', amount_spent_usd:400, impressions:100000, reach:70000, frequency:1.43, link_clicks:2600, post_engagements:1300, new_conversations:150, total_conversations:200},
+      {month: 5, year: 2025, objective_code:'AW', objective_name:'Awareness', campaign_name:'Campaña May', amount_spent_usd:480, impressions:115000, reach:78000, frequency:1.47, link_clicks:3000, post_engagements:1450, new_conversations:170, total_conversations:240},
+      {month: 6, year: 2025, objective_code:'SA', objective_name:'Conversaciones', campaign_name:'Campaña Jun', amount_spent_usd:600, impressions:140000, reach:95000, frequency:1.47, link_clicks:3800, post_engagements:1700, new_conversations:230, total_conversations:330}
+    ];
+    let filtered = [];
+    let chart = null;
+    // Utility functions
+    const fmtInt = (n) => n == null ? '—' : Number(n).toLocaleString('es-GT');
+    const fmtMoney = (n, cur) => n == null ? '—' : (cur === 'USD' ? `$${n.toFixed(2)}` : `Q${n.toFixed(2)}`);
+    const safeNum = (v) => { const x = Number(v); return isFinite(x) ? x : 0; };
+    function monthLabel(m) {
+      const map = {1:'enero',2:'febrero',3:'marzo',4:'abril',5:'mayo',6:'junio',7:'julio',8:'agosto',9:'septiembre',10:'octubre',11:'noviembre',12:'diciembre'};
+      return map[m] || String(m);
+    }
+    function resultMetricByObjective(code) {
+      if(code==='TR') return 'link_clicks';
+      if(code==='SA') return 'total_conversations';
+      if(code==='EN') return 'post_engagements';
+      if(code==='AW') return 'reach';
+      return 'link_clicks';
+    }
+
+    // Populate month filter based on data
+    function refreshMonthFilter() {
+      const sel = document.getElementById('month');
+      const values = Array.from(new Set(rawData.map(r => r.month))).sort((a,b) => a - b);
+      sel.innerHTML = '<option value="ALL">Todos</option>' + values.map(v => {
+        return `<option value="${v}">${monthLabel(v)}</option>`;
+      }).join('');
+    }
+
+    // Apply current filters to compute KPIs and render
+    function applyFilters() {
+      const currency = document.getElementById('currency').value;
+      const fx = Number(document.getElementById('fx').value) || 7.9;
+      const m = document.getElementById('month').value;
+      const obj = document.getElementById('objective').value;
+      filtered = rawData.filter(r => {
+        const monthMatch = (m === 'ALL') || (String(r.month) === String(m));
+        const objMatch = (obj === 'ALL') || (r.objective_code === obj);
+        return monthMatch && objMatch;
+      });
+      const agg = filtered.reduce((a, r) => {
+        a.usd += safeNum(r.amount_spent_usd);
+        a.impr += safeNum(r.impressions);
+        a.reach += safeNum(r.reach);
+        a.freqSum += safeNum(r.frequency);
+        a.freqN += (r.frequency ? 1 : 0);
+        a.clicks += safeNum(r.link_clicks);
+        a.eng += safeNum(r.post_engagements);
+        a.newc += safeNum(r.new_conversations);
+        a.totc += safeNum(r.total_conversations);
+        return a;
+      }, {usd:0,impr:0,reach:0,freqSum:0,freqN:0,clicks:0,eng:0,newc:0,totc:0});
+      const cpcUsd = agg.clicks > 0 ? (agg.usd / agg.clicks) : null;
+      const spendDisp = currency === 'USD' ? agg.usd : agg.usd * fx;
+      const cpcDisp = currency === 'USD' ? cpcUsd : (cpcUsd != null ? cpcUsd * fx : null);
+      document.getElementById('kpi_spend').textContent = fmtMoney(spendDisp, currency);
+      document.getElementById('kpi_impr').textContent = fmtInt(agg.impr);
+      document.getElementById('kpi_reach').textContent = fmtInt(agg.reach);
+      document.getElementById('kpi_freq').textContent = agg.freqN ? (agg.freqSum / agg.freqN).toFixed(2) : '—';
+      document.getElementById('kpi_clicks').textContent = fmtInt(agg.clicks);
+      document.getElementById('kpi_eng').textContent = fmtInt(agg.eng);
+      document.getElementById('kpi_newconv').textContent = fmtInt(agg.newc);
+      document.getElementById('kpi_totconv').textContent = fmtInt(agg.totc);
+      document.getElementById('kpi_cpc').textContent = cpcDisp == null ? '—' : fmtMoney(cpcDisp, currency);
+      renderTrend(currency, fx, obj);
+      renderRanking(currency, fx, obj);
+    }
+
+    // Chart rendering
+    function renderTrend(currency, fx, obj) {
+      const code = (obj === 'ALL') ? 'TR' : obj;
+      const metric = resultMetricByObjective(code);
+      const byMonth = {};
+      (filtered.length ? filtered : rawData).forEach(r => {
+        if(obj !== 'ALL' && r.objective_code !== obj) return;
+        const key = `${r.year}-${String(r.month).padStart(2, '0')}`;
+        if(!byMonth[key]) byMonth[key] = {usd: 0, metric: 0, m: r.month, y: r.year};
+        byMonth[key].usd += safeNum(r.amount_spent_usd);
+        byMonth[key].metric += safeNum(r[metric]);
+      });
+      const keys = Object.keys(byMonth).sort();
+      const labels = keys.map(k => `${monthLabel(byMonth[k].m)} ${byMonth[k].y}`);
+      const spend = keys.map(k => byMonth[k].usd);
+      const resultVals = keys.map(k => byMonth[k].metric);
+      const spendConv = currency === 'USD' ? spend : spend.map(v => v * fx);
+      const ctx = document.getElementById('trendChart').getContext('2d');
+      if(chart) { chart.destroy(); chart = null; }
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label: `Invertido (${currency})`, data: spendConv, borderWidth: 2, tension: .25 },
+            { label: `${metric.replace('_',' ')}`, data: resultVals, borderWidth: 2, tension: .25 }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          scales: {
+            y: { ticks: { callback: (v) => Number(v).toLocaleString('es-GT') } }
+          },
+          plugins: { legend: { position: 'bottom' } }
+        }
+      });
+      const legend = document.getElementById('trendLegend');
+      const human = code === 'TR' ? 'Clics en enlace' : code === 'SA' ? 'Conversaciones totales' : code === 'EN' ? 'Interacciones' : 'Alcance';
+      legend.textContent = `Comparando inversión vs “${human}”`;
+    }
+
+    // Ranking table
+    function renderRanking(currency, fx, obj) {
+      const rows = (filtered.length ? filtered : rawData).filter(r => obj === 'ALL' || r.objective_code === obj);
+      const agg = {};
+      rows.forEach(r => {
+        const key = `${r.campaign_name}||${r.objective_code}`;
+        if(!agg[key]) agg[key] = {campaign_name: r.campaign_name, objective_code: r.objective_code, usd: 0, impr: 0, reach: 0, clicks: 0, eng: 0, newc: 0, totc: 0};
+        const a = agg[key];
+        a.usd += safeNum(r.amount_spent_usd);
+        a.impr += safeNum(r.impressions);
+        a.reach += safeNum(r.reach);
+        a.clicks += safeNum(r.link_clicks);
+        a.eng += safeNum(r.post_engagements);
+        a.newc += safeNum(r.new_conversations);
+        a.totc += safeNum(r.total_conversations);
+      });
+      let list = Object.values(agg);
+      if(obj === 'TR') list.sort((x,y) => (y.clicks - x.clicks) || ((x.usd/(x.clicks||1)) - (y.usd/(y.clicks||1))));
+      else if(obj === 'SA') list.sort((x,y) => (y.totc - x.totc) || ((x.usd/(x.totc||1)) - (y.usd/(y.totc||1))));
+      else if(obj === 'EN') list.sort((x,y) => (y.eng - x.eng));
+      else if(obj === 'AW') list.sort((x,y) => (y.reach - x.reach));
+      else list.sort((x,y) => (y.usd - x.usd));
+      list = list.slice(0, 25);
+      const tbody = document.getElementById('rankBody');
+      tbody.innerHTML = '';
+      list.forEach(a => {
+        const spendDisp = currency === 'USD' ? a.usd : a.usd * fx;
+        const cpcVal = a.clicks ? (a.usd / a.clicks) : null;
+        const cpcDisp = cpcVal == null ? '—' : (currency === 'USD' ? `$${cpcVal.toFixed(2)}` : `Q${(cpcVal*fx).toFixed(2)}`);
+        const tr = document.createElement('tr');
+        tr.className = 'border-t';
+        tr.innerHTML = `\n          <td class="px-3 py-2">${a.campaign_name || '—'}</td>\n          <td class="px-3 py-2">${a.objective_code || '—'}</td>\n          <td class="px-3 py-2">${fmtMoney(spendDisp, currency)}</td>\n          <td class="px-3 py-2">${fmtInt(a.impr)}</td>\n          <td class="px-3 py-2">${fmtInt(a.reach)}</td>\n          <td class="px-3 py-2">${fmtInt(a.clicks)}</td>\n          <td class="px-3 py-2">${fmtInt(a.eng)}</td>\n          <td class="px-3 py-2">${fmtInt(a.newc)}</td>\n          <td class="px-3 py-2">${fmtInt(a.totc)}</td>\n          <td class="px-3 py-2">${cpcDisp}</td>\n        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Simple CSV parser for optional uploads
+    function parseCsv(text) {
+      const lines = text.split(/\r?\n/).filter(Boolean);
+      const headers = lines.shift().split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+      return lines.map(line => {
+        const cols = line.match(/("([^" ]|"")*"|[^,]+)/g) || [];
+        const obj = {};
+        headers.forEach((h, i) => {
+          const raw = (cols[i] || '').trim().replace(/^"|"$/g, '').replace(/""/g, '"');
+          obj[h] = raw;
+        });
+        return obj;
+      });
+    }
+    document.getElementById('fileInput').addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if(!file) return;
+      const text = await file.text();
+      const rows = parseCsv(text);
+      // Map CSV rows to expected structure
+      rawData = rows.map(r => ({
+        month: isNaN(Number(r.month)) ? r.month : Number(r.month),
+        year: Number(r.year) || null,
+        objective_code: (r.objective_code || '').toUpperCase(),
+        objective_name: r.objective_name || '',
+        campaign_name: r.campaign_name || '',
+        amount_spent_usd: Number(r.amount_spent_usd) || 0,
+        impressions: Number(r.impressions) || 0,
+        reach: Number(r.reach) || 0,
+        frequency: Number(r.frequency) || 0,
+        link_clicks: Number(r.link_clicks) || 0,
+        post_engagements: Number(r.post_engagements) || 0,
+        new_conversations: Number(r.new_conversations) || 0,
+        total_conversations: Number(r.total_conversations) || 0
+      }));
+      refreshMonthFilter();
+      applyFilters();
+    });
+    ['currency','fx','month','objective'].forEach(id => document.getElementById(id).addEventListener('change', applyFilters));
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      document.getElementById('currency').value = 'USD';
+      document.getElementById('fx').value = 7.90;
+      document.getElementById('month').value = 'ALL';
+      document.getElementById('objective').value = 'ALL';
+      applyFilters();
+    });
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const rows = filtered.length ? filtered : rawData;
+      if(!rows.length) { alert('No hay datos para exportar.'); return; }
+      const headers = Object.keys(rows[0] || {});
+      const esc = (s) => `"${String(s ?? '').replaceAll('"', '""')}"`;
+      const head = headers.map(esc).join(',');
+      const body = rows.map(r => headers.map(h => esc(r[h])).join(',')).join('\n');
+      const csv = head + '\n' + body;
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'figuepartes_meta_view.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+    window.addEventListener('resize', () => { if(chart) chart.resize(); });
+    // Initialize on load
+    refreshMonthFilter();
+    applyFilters();
+  </script>
+</body>
+</html>
